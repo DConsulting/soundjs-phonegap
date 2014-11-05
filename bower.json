@@ -12,6 +12,7 @@
     "phonegap",
     "soundjs",
     "createjs"
+  ],
   "ignore": [
     "**/.*",
     "node_modules",
