@@ -1,0 +1,22 @@
+{
+  "name": "soundjs-phonegap",
+  "version": "0.0.1",
+  "main": ["src/soundjs-pg.js", "src/easeljs-helper.js"],
+  "homepage": "https://github.com/DConsulting/soundjs-phonegap",
+  "authors": [
+    "Angel Vladov <angel.vladov@d-consult.net>"
+  ],
+  "description": "SoundJS plugin for Phonegap/Cordova",
+  "keywords": [
+    "cordova",
+    "phonegap",
+    "soundjs",
+    "createjs"
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+	"docs",
+	"examples"
+  ]
+}
