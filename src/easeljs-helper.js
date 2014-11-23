@@ -125,7 +125,6 @@
 				self.loadDependencies(lib.properties.manifest, baseManifestPath, function() {
 					if (self._isDisposed) return;
 
-					alert('d load done');
 					self.dispatchEvent(FlashCanvasManager.Events.SCRIPT_LOADED);
 					self.attachRoot();
 
