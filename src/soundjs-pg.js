@@ -230,6 +230,7 @@ this.createjs = this.createjs || {};
 			}
 		});
 	}
+
 	p.pan = 0;
 	p._duration = 0;
 	p._audioSpriteStopTime = null;	// PhonegapAudioPlugin only
@@ -279,7 +280,11 @@ this.createjs = this.createjs || {};
 		);
 
 		this.src = src;
-		this._startTime = startTime || 0;	// convert ms to s as web audio handles everything in seconds
+		this._startTime = startTime;	// convert ms to s as web audio handles everything in seconds
+
+		if (isNaN(this._startTime)) {
+			this._startTime = 0;
+		}
 
 		if (this._duration) {
 			this._duration = duration;
@@ -297,22 +302,34 @@ this.createjs = this.createjs || {};
 		var pgMedia = this._pgMedia;
 
 		if (pgMedia != null) {
-			pgMedia.pause();
+			pgMedia.stop();
 
 			this._listenFor.soundComplete = false;
 			this._listenFor.soundLoop = false;
 
-			try {
-				this._pgMedia.seekTo(this._startTime);
-			} catch (e) {
-			} // Reset Position
+			//try {
+			//	this._pgMedia.seekTo(this._startTime);
+			//} catch (e) { } // Reset Position
 
-			this._pgMedia.release();
+			//pgMedia.release();
 			this._pgMedia = null;
 		}
 
 		clearTimeout(this._delayTimeoutId);
 		createjs.Sound._playFinished(this);
+	};
+
+	p._playPhonegapMedia = function() {
+		var pgMedia = this._pgMedia;
+		var self = this;
+
+		setTimeout(function() {
+			// Make sure that the sound is updated. Neither the timeout nor the update volume are in the original soundjs code
+			// Revise and when Phonegap Media starts to work fine remove them.
+			self._updateVolume();
+			pgMedia.play();
+		}, 0);
+
 	};
 
 	p._interrupt = function () {
@@ -323,9 +340,10 @@ this.createjs = this.createjs || {};
 		this._sendEvent("interrupted");
 	};
 
-// Public API
+	// Public API
 	p.play = function (interrupt, delay, offset, loop, volume, pan) {
 		this._cleanUp();
+
 		createjs.Sound._playInstance(this, interrupt, delay, offset, loop, volume, pan);
 	};
 
@@ -339,8 +357,13 @@ this.createjs = this.createjs || {};
 
 		// Reset this instance.
 		this._offset = offset;
-		this._volume = volume;
-		this._updateVolume();
+
+		if (isNaN(this._offset)) {
+			this._offset = 0;
+		}
+
+		// TODO: This was _volume
+		this.setVolume(volume);
 		this._remainingLoops = loop;
 		this._handleSoundReady(null);
 
@@ -360,7 +383,9 @@ this.createjs = this.createjs || {};
 			return;
 		}
 
-		this._pgMedia.seekTo(this._startTime + this._offset);
+		try {
+			this._pgMedia.seekTo(this._startTime + this._offset);
+		} catch (e) {}
 
 		if (this._remainingLoops == -1) {
 			//this.tag.loop = true;
@@ -371,7 +396,7 @@ this.createjs = this.createjs || {};
 			// TODO: Perhaps we should do something else here
 		}
 
-		this._pgMedia.play();
+		this._playPhonegapMedia();
 	};
 
 	p.pause = function () {
@@ -388,7 +413,7 @@ this.createjs = this.createjs || {};
 	p.resume = function () {
 		if (!this._paused || this._pgMedia == null) {return false;}
 		this.paused = this._paused = false;
-		this._pgMedia.play();
+		this._playPhonegapMedia();
 		return true;
 	};
 
@@ -405,6 +430,8 @@ this.createjs = this.createjs || {};
 	};
 
 	p.setVolume = function (value) {
+		if (value == null) return; // null or undefined aren't valid values
+
 		this._volume = value;
 		this._updateVolume();
 		return true;
@@ -414,7 +441,7 @@ this.createjs = this.createjs || {};
 		if (this._pgMedia != null) {
 			var newVolume = (this._muted || createjs.Sound._masterMute) ? 0 : this._volume * createjs.Sound._masterVolume;
 
-			this._pgMedia.setVolume(newVolume);
+			this._pgMedia.setVolume(newVolume.toString());
 		}
 	};
 
@@ -454,14 +481,18 @@ this.createjs = this.createjs || {};
 	};
 
 	p.setPosition = function (value) {
+		if (isNaN(value)) {
+			value = 0;
+		}
+
 		if (this._pgMedia == null) {
 			this._offset = value
 		} else {
 			this._listenFor.soundLoop = false;
 
-			try {
-				value = value + this._startTime;
+			value = value + this._startTime;
 
+			try {
 				this._pgMedia.seekTo(value);
 			} catch (error) { // Out of range
 				return false;
@@ -496,8 +527,11 @@ this.createjs = this.createjs || {};
 			}
 		}
 		else {
-			this._pgMedia.seekTo(this._startTime);
-			this._pgMedia.play();
+			try {
+				this._pgMedia.seekTo(this._startTime);
+			} catch (e) {}
+
+			this._playPhonegapMedia();
 		}
 
 		this._sendEvent("loop");

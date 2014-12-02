@@ -71,7 +71,7 @@
 
 		this.root = new this.lib[this.rootName]();
 
-		this.prepareStage(this.stage, this.root);
+		this.prepareStage(this.stage, this.root, this.lib);
 		this.stage.addChild(this.root);
 		this.stage.update();
 
@@ -124,7 +124,7 @@
 
 				self.loadDependencies(lib.properties.manifest, baseManifestPath, function() {
 					if (self._isDisposed) return;
-
+					
 					self.dispatchEvent(FlashCanvasManager.Events.SCRIPT_LOADED);
 					self.attachRoot();
 
