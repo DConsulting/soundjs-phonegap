@@ -17,6 +17,9 @@
 
 		this.canvas = $(canvasElement);
 		this.stage = new createjs.Stage(canvasElement);
+
+		createjs.Touch.enable(this.stage);
+
 		this.root = null;
 		this.rootName = null;
 		this.images = {};
@@ -153,6 +156,8 @@
 		var self = this;
 
 		var handleFileLoad = function(evt) {
+			//console.log(evt.item.type);
+
 			if (evt.item.type == "image") { self.images[evt.item.id] = evt.result; }
 		};
 
@@ -188,6 +193,8 @@
 		if (destroyStage && this.stage) {
 			createjs.Ticker.removeEventListener('tick', this.stage);
 			this.dispatchEvent(FlashCanvasManager.Events.STAGE_DESTROY);
+			createjs.Touch.disable(this.stage);
+
 			this.stage = null;
 		}
 
@@ -198,6 +205,7 @@
 	};
 
 	FlashCanvasManager.prototype.dispose = function() {
+		this.clearStage(true);
 		this._isDisposed = true;
 	};
 
@@ -215,6 +223,9 @@
 	 * @param {Object} images
 	 */
 	MoviesCache.prototype.add = function(id, lib, images) {
+		// FIXME: Cache temporarily disabled because it breaks going back to home screen functionality.
+		return;
+
 		if (lib != null && typeof lib === 'object') {
 			this._cache[id] = {lib: lib, images: images || {}};
 		} else {
