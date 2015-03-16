@@ -1,0 +1,3 @@
+Version 0.0.4
+- Archtecture upgraded to work with SoundJS 0.6.0
+- Sound plugin now uses Phonegap LowLatenctAudio plugin
