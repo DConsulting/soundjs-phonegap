@@ -18,6 +18,9 @@
 		this.canvas = $(canvasElement);
 		this.stage = new createjs.Stage(canvasElement);
 
+		// Contains the original sound objects from the manifest
+		this._soundObjects = [];
+
 		createjs.Touch.enable(this.stage);
 
 		this.root = null;
@@ -156,9 +159,11 @@
 		var self = this;
 
 		var handleFileLoad = function(evt) {
-			//console.log(evt.item.type);
-
-			if (evt.item.type == "image") { self.images[evt.item.id] = evt.result; }
+			if (evt.item.type === 'sound') {
+				self._soundObjects.push(evt.item);
+			} else if (evt.item.type === "image") {
+				self.images[evt.item.id] = evt.result;
+			}
 		};
 
 		var handleComplete = function() {
@@ -187,7 +192,7 @@
 	 */
 	FlashCanvasManager.prototype.clearStage = function(destroyStage) {
 		if (destroyStage === undefined) {
-			throw  'Destroy stage must have a value of "true" or "false".';
+			throw 'Destroy stage must have a value of "true" or "false".';
 		}
 
 		if (destroyStage && this.stage) {
@@ -207,6 +212,10 @@
 	FlashCanvasManager.prototype.dispose = function() {
 		this.clearStage(true);
 		this._isDisposed = true;
+
+		if (this._soundObjects) {
+			createjs.Sound.removeSounds(this._soundObjects);
+		}
 	};
 
 	// See http://www.createjs.com/Docs/EaselJS/classes/EventDispatcher.html
