@@ -83,9 +83,22 @@
 
 		// We should probably clear previous stage.Not sure yet.
 		createjs.Ticker.setFPS(this.lib.properties.fps);
-		createjs.Ticker.addEventListener('tick', this.stage);
+		this.listenForTicks();
 
 		this.dispatchEvent(FlashCanvasManager.Events.ROOT_READY);
+	};
+
+	/**
+	 * @param {boolean} [value] Default is true
+	 */
+	FlashCanvasManager.prototype.listenForTicks = function(value) {
+		if (!this.stage) return;
+
+		if (value || angular.isUndefined(value)) {
+			createjs.Ticker.addEventListener('tick', this.stage);
+		} else {
+			createjs.Ticker.removeEventListener('tick', this.stage);
+		}
 	};
 
 	FlashCanvasManager.prototype.loadScript = function(scriptPath, rootName, doneCallback) {
@@ -192,7 +205,7 @@
 	 */
 	FlashCanvasManager.prototype.clearStage = function(destroyStage) {
 		if (destroyStage === undefined) {
-			throw 'Destroy stage must have a value of "true" or "false".';
+			throw  'Destroy stage must have a value of "true" or "false".';
 		}
 
 		if (destroyStage && this.stage) {
