@@ -119,6 +119,7 @@
 				}
 
 				var lib, images, cachedMovie;
+				var ss;
 
 				if (cacheId && FlashCanvasManager.moviesCache.contains(cacheId)) {
 					cachedMovie = FlashCanvasManager.moviesCache.get(cacheId);
