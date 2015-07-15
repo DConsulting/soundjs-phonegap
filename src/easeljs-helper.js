@@ -7,7 +7,8 @@
 		STAGE_CREATED: 'stage_created',
 		STAGE_DESTROY: 'stage_destroy',
 		ROOT_READY: 'root_ready',
-		ROOT_DESTROY: 'root_destroy'
+		ROOT_DESTROY: 'root_destroy',
+		LOAD_MANIFEST: 'load_manifest'
 	};
 
 	function FlashCanvasManager(canvasElement) {
@@ -27,6 +28,7 @@
 		this.rootName = null;
 		this.images = {};
 		this.lib = {};
+		this.ss = {};
 	}
 
 	FlashCanvasManager.prototype.baseManifestPath = function(value) {
@@ -106,6 +108,7 @@
 		this.cacheIdForPromise = function(promise) { return scriptPath; };
 	};
 
+
 	FlashCanvasManager.prototype.loadScriptPromise = function(promise, rootName, doneCallback) {
 		this.rootName = rootName;
 		var self = this;
@@ -119,23 +122,25 @@
 				}
 
 				var lib, images, cachedMovie;
-				var ss;
+				var ss; // Spritesheet go here.
 
 				if (cacheId && FlashCanvasManager.moviesCache.contains(cacheId)) {
 					cachedMovie = FlashCanvasManager.moviesCache.get(cacheId);
 					lib = self.lib = cachedMovie.lib;
 					images = self.images = cachedMovie.images;
+					ss = cachedMovie.ss;
 				}
 				else {
 					lib = self.lib;
 					images = self.images;
+					ss = self.ss;
 
 					// We are forced to use eval due to the way flash exports the content.
 					// Remove duplicate values and execute the script;
 					eval(data.substr(0, data.lastIndexOf(');') + 2)); // jshint ignore:line
 
 					if (cacheId) {
-						FlashCanvasManager.moviesCache.add(cacheId, lib, images);
+						FlashCanvasManager.moviesCache.add(cacheId, lib, images, ss);
 					}
 				}
 
@@ -159,7 +164,7 @@
 				}
 			}
 		);
-	}
+	};
 
 	/**
 	 * @param {Array} manifest
@@ -173,14 +178,22 @@
 		var self = this;
 
 		var handleFileLoad = function(evt) {
-			if (evt.item.type === 'sound') {
-				self._soundObjects.push(evt.item);
-			} else if (evt.item.type === "image") {
-				self.images[evt.item.id] = evt.result;
+			switch (evt.item.type) {
+				case 'sound':
+					self._soundObjects.push(evt.item);
+					break;
+
+				case 'image':
+					self.images[evt.item.id] = evt.result;
+					break;
+
+				case 'spritesheet':
+					self.ss[evt.item.id] = evt.result;
+					break;
 			}
 		};
 
-		var handleComplete = function() {
+		var handleComplete = function(evt) {
 			if (doneCallback) {
 				doneCallback();
 			}
@@ -189,10 +202,22 @@
 		};
 
 		loader.installPlugin(createjs.Sound);
-		loader.addEventListener("fileload", handleFileLoad);
-		loader.addEventListener("complete", handleComplete);
+		loader.addEventListener('fileload', handleFileLoad);
+		loader.addEventListener('complete', handleComplete);
+		loader.addEventListener('initialize', function(e) {
+			console.log(e);
+		});
 
 		if (manifest.length) {
+			self.dispatchEvent(
+				angular.extend(
+					new createjs.Event(FlashCanvasManager.Events.LOAD_MANIFEST), {
+						manifest: manifest,
+						loadQueue: loader
+					}
+				)
+			);
+
 			loader.loadManifest(manifest);
 		} else {
 			// For some reason an empty manifest file never completes loading
@@ -243,14 +268,15 @@
 	 *
 	 * @param {String} id
 	 * @param {Object} lib
-	 * @param {Object} images
+	 * @param {Object} [images]
+	 * @param {Object} [ss]
 	 */
-	MoviesCache.prototype.add = function(id, lib, images) {
+	MoviesCache.prototype.add = function(id, lib, images, ss) {
 		// FIXME: Cache temporarily disabled because it breaks going back to home screen functionality.
 		return;
 
 		if (lib != null && typeof lib === 'object') {
-			this._cache[id] = {lib: lib, images: images || {}};
+			this._cache[id] = {lib: lib, images: images || {}, ss: ss || {}};
 		} else {
 			throw 'Invalid "movie" parameter type. CreateJS library expected.';
 		}
