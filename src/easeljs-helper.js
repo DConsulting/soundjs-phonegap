@@ -8,7 +8,8 @@
 		STAGE_DESTROY: 'stage_destroy',
 		ROOT_READY: 'root_ready',
 		ROOT_DESTROY: 'root_destroy',
-		LOAD_MANIFEST: 'load_manifest'
+		LOAD_MANIFEST: 'load_manifest',
+		DISPOSE: 'dispose'
 	};
 
 	function FlashCanvasManager(canvasElement) {
@@ -21,6 +22,7 @@
 
 		// Contains the original sound objects from the manifest
 		this._soundObjects = [];
+		this._isDisposed = false;
 
 		createjs.Touch.enable(this.stage);
 
@@ -248,13 +250,23 @@
 		}
 	};
 
+	FlashCanvasManager.prototype.isDisposed = function() {
+		return this._isDisposed;
+	};
+
 	FlashCanvasManager.prototype.dispose = function() {
-		this.clearStage(true);
+		if (this._isDisposed) {
+			return;
+		}
+
 		this._isDisposed = true;
+		this.clearStage(true);
 
 		if (this._soundObjects) {
 			createjs.Sound.removeSounds(this._soundObjects);
 		}
+
+		this.dispatchEvent(FlashCanvasManager.Events.DISPOSE);
 	};
 
 	// See http://www.createjs.com/Docs/EaselJS/classes/EventDispatcher.html
