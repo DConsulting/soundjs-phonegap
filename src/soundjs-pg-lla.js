@@ -56,6 +56,11 @@ this.createjs = this.createjs || {};
     };
 
     p.register = function (loadItem, instances) {
+        if (typeof loadItem === 'string') {
+            // This is an url but AbstractPlugin_register expects an object with src property.
+            loadItem = {src: loadItem};
+        }
+
         var loader = this.AbstractPlugin_register(loadItem, instances);
 
         return loader;
@@ -159,7 +164,7 @@ this.createjs = this.createjs || {};
 
     // PUBLIC METHODS
     p.toString = function() {
-      return '[LowLatencyAudioInstance]';
+        return '[LowLatencyAudioInstance]';
     };
 
     p.setMasterVolume = function(value) {
@@ -190,19 +195,35 @@ this.createjs = this.createjs || {};
         this.setVolume(volume);
         //this.setPan(pan);
 
+        if (loop < 0) {
+            this._loopRequired = true;
+        }
+
         setTimeout(function() {
-            lla.preloadAudio(self.src, self.src, self._volume || 0.1, 1,
-                function onPreloadSuccess() {
+            var onPreloadSuccess = function() {
+                setTimeout(function() {
                     self._paused = false;
                     self._llaSoundPreloaded = true;
                     self._handleSoundReady();
                     self.playState = createjs.Sound.PLAY_SUCCEEDED;
                     self._sendEvent("succeeded");
-                },
-                function onPreloadFail() {
+                }, 0);
+
+            };
+
+            var onPreloadFail = function() {
+                setTimeout(function() {
                     self._playFailed();
-                }
-            );
+                }, 0);
+            };
+
+            //if (this._loopRequired) {
+                lla.preloadAudio(self.src, self.src, self._volume || 1, 1, onPreloadSuccess, onPreloadFail);
+            //} else {
+            // // PRELOADFX Breaks preload audio
+            //   lla.preloadFX(self.src, self.src, onPreloadSuccess, onPreloadFail);
+            //}
+
         }, 0);
 
         return true;
