@@ -85,8 +85,8 @@
 		this.stage.addChild(this.root);
 		this.stage.update();
 
-		// We should probably clear previous stage.Not sure yet.
-		createjs.Ticker.setFPS(this.lib.properties.fps);
+		// We should probably clear previous stage. Not sure yet.
+		//createjs.Ticker.setFPS(this.lib.properties.fps);
 		this.listenForTicks();
 
 		this.dispatchEvent(FlashCanvasManager.Events.ROOT_READY);
@@ -200,6 +200,7 @@
 				doneCallback();
 			}
 
+			loader.destroy();
 			self.dispatchEvent(FlashCanvasManager.Events.DEPENDENCIES_LOADED);
 		};
 
