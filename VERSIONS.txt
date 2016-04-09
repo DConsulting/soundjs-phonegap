@@ -1,3 +1,7 @@
+Version 1.0.0
+- Switched to WebAudioPlugin
+- Background sounds support
+
 Version 0.0.5
 - Support for Flash CC 2015 export with SpriteSheets
 

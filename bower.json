@@ -1,6 +1,6 @@
 {
   "name": "soundjs-phonegap",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "main": ["src/lazy-web-audio.js", "src/easeljs-helper.js", "src/phonegap-lla.js"],
   "homepage": "https://github.com/DConsulting/soundjs-phonegap",
   "authors": [

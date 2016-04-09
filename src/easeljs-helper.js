@@ -6,6 +6,7 @@
 		SCRIPT_LOADED: 'script_complete',
 		STAGE_CREATED: 'stage_created',
 		STAGE_DESTROY: 'stage_destroy',
+		STAGE_READY: 'stage_ready', // Dispatched when the stage is ready bu before the root is added as a child.
 		ROOT_READY: 'root_ready',
 		ROOT_DESTROY: 'root_destroy',
 		LOAD_MANIFEST: 'load_manifest',
@@ -13,10 +14,6 @@
 	};
 
 	function FlashCanvasManager(canvasElement) {
-		if (!FlashCanvasManager.moviesCache) {
-			FlashCanvasManager.moviesCache = new createjsUtil.MoviesCache();
-		}
-
 		this.canvas = $(canvasElement);
 		this.stage = new createjs.Stage(canvasElement);
 
@@ -42,16 +39,6 @@
 	};
 
 	/**
-	 * CAN OVERRIDE
-	 * Override if you want to update stage and root properties before the root is attached to the stage.
-	 */
-	FlashCanvasManager.prototype.prepareStage = function(stage, root) {
-
-	};
-
-	/**
-	 * CAN OVERRIDE
-	 *
 	 * Resolves a manifest entry path. Override in case you moved the exported flash lib dependencies
 	 * to a different folder. If null is returned then the entry won't be loaded.
 	 *
@@ -60,15 +47,6 @@
 	 */
 	FlashCanvasManager.prototype.resolveManifestPath = function(entry) {
 		return entry.src;
-	};
-
-	/**
-	 * Override to allow movie caching. If you are giving custom promise on load there is no way to detect the url.
-	 * @param {Promise} [promise]
-	 * @returns {String}
-	 */
-	FlashCanvasManager.prototype.cacheIdForPromise = function(promise) {
-		return null;
 	};
 
 	FlashCanvasManager.prototype.attachRoot = function() {
@@ -80,15 +58,14 @@
 		}
 
 		this.root = new this.lib[this.rootName]();
+		this.dispatchEvent(FlashCanvasManager.Events.STAGE_READY);
 
-		this.prepareStage(this.stage, this.root, this.lib);
 		this.stage.addChild(this.root);
 		this.stage.update();
 
 		// We should probably clear previous stage. Not sure yet.
 		//createjs.Ticker.setFPS(this.lib.properties.fps);
 		this.listenForTicks();
-
 		this.dispatchEvent(FlashCanvasManager.Events.ROOT_READY);
 	};
 
@@ -98,62 +75,56 @@
 	FlashCanvasManager.prototype.listenForTicks = function(value) {
 		if (!this.stage) return;
 
-		if (value || angular.isUndefined(value)) {
+		if (value || value === undefined) {
 			createjs.Ticker.addEventListener('tick', this.stage);
 		} else {
 			createjs.Ticker.removeEventListener('tick', this.stage);
 		}
 	};
 
+	/**
+	 * @param {String} scriptPath
+	 * @param {String} rootName
+	 * @param {Function} [doneCallback]
+	 * @returns {Promise}
+	 */
 	FlashCanvasManager.prototype.loadScript = function(scriptPath, rootName, doneCallback) {
-		// TODO: Complete method implementation. Use createjs loader
-		this.cacheIdForPromise = function(promise) { return scriptPath; };
+		return this.loadScriptPromise($.get(scriptPath), rootName, doneCallback);
 	};
 
 
-	FlashCanvasManager.prototype.loadScriptPromise = function(promise, rootName, doneCallback) {
+	/**
+	 * @param {Promise} scriptPromise
+	 * @param {String} rootName
+	 * @param {Function} [doneCallback]
+	 * @returns {Promise}
+	 */
+	FlashCanvasManager.prototype.loadScriptPromise = function(scriptPromise, rootName, doneCallback) {
 		this.rootName = rootName;
 		var self = this;
-		var cacheId = self.cacheIdForPromise(promise);
 
-		promise.then(
+		scriptPromise.then(
 			function(data) {
 				if (typeof data === 'object') {
 					// Not a string. Search the content in most probable property names;
 					data = data.data || data.text || data.response;
 				}
 
-				var lib, images, cachedMovie;
-				var ss; // Spritesheet go here.
+				var lib = self.lib;
+				var images = self.images;
+				var ss = self.ss;  // Spritesheets go here.
 
-				if (cacheId && FlashCanvasManager.moviesCache.contains(cacheId)) {
-					cachedMovie = FlashCanvasManager.moviesCache.get(cacheId);
-					lib = self.lib = cachedMovie.lib;
-					images = self.images = cachedMovie.images;
-					ss = cachedMovie.ss;
-				}
-				else {
-					lib = self.lib;
-					images = self.images;
-					ss = self.ss;
+				// We are forced to use eval due to the way flash exports the content.
+				// Remove duplicate values and execute the script;
+				eval(data.substr(0, data.lastIndexOf(');') + 2)); // jshint ignore:line
 
-					// We are forced to use eval due to the way flash exports the content.
-					// Remove duplicate values and execute the script;
-					eval(data.substr(0, data.lastIndexOf(');') + 2)); // jshint ignore:line
-
-					if (cacheId) {
-						FlashCanvasManager.moviesCache.add(cacheId, lib, images, ss);
-					}
-				}
-
-				// CreateJS load queue modifies URLs so prevent using basePath with cached objects.
-				var baseManifestPath = cachedMovie == null ? self._baseManifestPath : null;
-
-				self.loadDependencies(lib.properties.manifest, baseManifestPath, function() {
+				// CreateJS load queue modifies URLs when objects are loaded. If we implement caching then
+				// loading cached objects will require null for basePath after the first load.
+				self.loadDependencies(lib.properties.manifest, self._baseManifestPath, function() {
 					if (self._isDisposed) return;
-					
-					self.dispatchEvent(FlashCanvasManager.Events.SCRIPT_LOADED);
+
 					self.attachRoot();
+					self.dispatchEvent(FlashCanvasManager.Events.SCRIPT_LOADED);
 
 					if (doneCallback) {
 						doneCallback();
@@ -166,6 +137,8 @@
 				}
 			}
 		);
+
+		return scriptPromise;
 	};
 
 	/**
@@ -211,7 +184,18 @@
 			console.log(e);
 		});
 
-		if (manifest.length) {
+		var filteredManifest = [];
+
+		manifest.forEach(function(entry) {
+			var resolvedSrc = self.resolveManifestPath(entry);
+
+			if (resolvedSrc) {
+				entry.src = resolvedSrc;
+				filteredManifest.push(entry);
+			}
+		});
+
+		if (filteredManifest.length) {
 			self.dispatchEvent(
 				angular.extend(
 					new createjs.Event(FlashCanvasManager.Events.LOAD_MANIFEST), {
@@ -221,7 +205,7 @@
 				)
 			);
 
-			loader.loadManifest(manifest);
+			loader.loadManifest(filteredManifest);
 		} else {
 			// For some reason an empty manifest file never completes loading
 			handleComplete();
@@ -255,6 +239,33 @@
 		return this._isDisposed;
 	};
 
+	/**
+	 * Unloads a sound instance and also stops it if it was playing.
+	 * Userd internal from the removeSounds function.
+	 * @param {String} src
+	 * @returns {Boolean} true id the sound was removed
+	 * @private
+	 */
+	FlashCanvasManager.prototype._removeSound = function(src) {
+		createjs.Sound.removeSound(src);
+	};
+
+	/**
+	 * Removes all sounds used by the current canvas. Used by dispose.
+	 * TODO: We need internal counter on all sounds so that we won't remove same sound created by other instances.
+	 */
+	FlashCanvasManager.prototype.removeSounds = function() {
+		var self = this;
+
+		if (this._soundObjects) {
+			angular.forEach(function(data) {
+				self._removeSound(data.src);
+			});
+
+			this._soundObjects = [];
+		}
+	};
+
 	FlashCanvasManager.prototype.dispose = function() {
 		if (this._isDisposed) {
 			return;
@@ -262,10 +273,7 @@
 
 		this._isDisposed = true;
 		this.clearStage(true);
-
-		if (this._soundObjects) {
-			createjs.Sound.removeSounds(this._soundObjects);
-		}
+		this.removeSounds();
 
 		this.dispatchEvent(FlashCanvasManager.Events.DISPOSE);
 	};
@@ -273,56 +281,31 @@
 	// See http://www.createjs.com/Docs/EaselJS/classes/EventDispatcher.html
 	createjs.EventDispatcher.initialize(FlashCanvasManager.prototype);
 
-	function MoviesCache() {
-		this._cache = {};
-	}
-
-	/**
-	 *
-	 * @param {String} id
-	 * @param {Object} lib
-	 * @param {Object} [images]
-	 * @param {Object} [ss]
-	 */
-	MoviesCache.prototype.add = function(id, lib, images, ss) {
-		// FIXME: Cache temporarily disabled because it breaks going back to home screen functionality.
-		return;
-
-		if (lib != null && typeof lib === 'object') {
-			this._cache[id] = {lib: lib, images: images || {}, ss: ss || {}};
-		} else {
-			throw 'Invalid "movie" parameter type. CreateJS library expected.';
-		}
-	};
-
-	/**
-	 * @param {String} id
-	 * @returns {Boolean}
-	 */
-	MoviesCache.prototype.contains = function(id) {
-		return this._cache[id] != null; // jshint ignore:line
-	};
-
-	/**
-	 * @param {String} id
-	 * @returns {MoveClip}
-	 */
-	MoviesCache.prototype.get = function(id) { return this._cache[id]; };
-
-	/**
-	 * @param {String} id
-	 */
-	MoviesCache.prototype.remove = function(id) {
-		if (this._cache[id]) {
-			delete this._cache[id];
-		}
-	};
-
-	MoviesCache.prototype.clear = function() {
-		this._cache = {};
-	};
-
 	window.createjsUtil = window.createjsUtil || {};
 	window.createjsUtil.FlashCanvasManager = FlashCanvasManager;
-	window.createjsUtil.MoviesCache = MoviesCache;
 }) (window);
+
+(function() {
+	'use strict';
+
+	var XHRRequest = createjs.XHRRequest;
+	var XHRRequest_checkError = XHRRequest.prototype._checkError;
+
+	XHRRequest.prototype._checkError = function () {
+		// Override of version 0.62 implementation
+
+		if ('cordova' in window) {
+			var status = parseInt(this._request.status);
+
+			switch (status) {
+				case 404:   // Not Found
+				// case 0: arraybuffer load on mobile devices reports 0 but the load is ok
+					return new Error(status);
+			}
+		} else {
+			return XHRRequest_checkError.apply(this);
+		}
+
+		return null;
+	};
+}) ();

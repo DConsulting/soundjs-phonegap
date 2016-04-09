@@ -3,6 +3,13 @@ this.createjs = this.createjs || {};
 (function() {
     'use strict';
 
+    /**
+     * Deprecated due to memory leaks with WebAudio on iOS in UIWebView. Use WebAudioPlugin instead.
+     * Not updated to match latest createjs architecture.
+     *
+     * @deprecated
+     * @constructor
+     */
     function LazyWebAudioPlugin() {
         this.AbstractPlugin_constructor();
 
@@ -28,8 +35,32 @@ this.createjs = this.createjs || {};
             s._context.close();
         }
 
-        s._context = new (window.AudioContext || window.webkitAudioContext)();
+        var desiredSampleRate = null;
+        var AudioCtor = window.AudioContext || window.webkitAudioContext;
 
+        desiredSampleRate = typeof desiredSampleRate === 'number'
+            ? desiredSampleRate
+            : 44100;
+
+        var context = new AudioCtor();
+
+        // Check if hack is necessary. Only occurs in iOS6+ devices
+        // and only when you first boot the iPhone, or play a audio/video
+        // with a different sample rate
+        if (/(iPhone|iPad)/i.test(navigator.userAgent) &&
+            context.sampleRate !== desiredSampleRate) {
+            var buffer = context.createBuffer(1, 1, desiredSampleRate);
+            var dummy = context.createBufferSource();
+            dummy.buffer = buffer;
+            dummy.connect(context.destination);
+            dummy.start(0);
+            dummy.disconnect();
+
+            context.close(); // dispose old context
+            context = new AudioCtor();
+        }
+
+        s._context = context;
         createjs.LazyWebAudioLoader.context = s._context;
         createjs.LazyWebAudioInstance.context = s._context;
     };
@@ -328,23 +359,32 @@ this.createjs = this.createjs || {};
         this._cleanUpAudioNode();
     };
 
-    p._cleanUpAudioNode = function () {
-        if (this._audioNode) {
-            this._gainNode.disconnect();
-            this._audioNode.disconnect();
-            this._audioNode.onended = null;
-            this._audioNode.stop(0);
-            this._audioNode = null;
-            this._gainNode = null;
+    p._cleanUpAudioNode = function (audioNode) {
+        if(audioNode) {
+            audioNode.stop(0);
+            audioNode.disconnect(0);
+            // necessary to prevent leak on iOS Safari 7-9. will throw in almost all other
+            // browser implementations.
+            try { audioNode.buffer = s._scratchBuffer; } catch(e) {}
+            audioNode = null;
         }
+
+        return audioNode;
     };
 
     p._handleCleanUp = function () {
-        this._cleanUpAudioNode();
+        this._cleanUpAudioNode(this._audioNode);
 
         if (p.forgetBufferOnClean) {
             this.playbackResource = null;
         }
+    };
+
+    p.destroy = function() {
+        this.AbstractSoundInstance_destroy();
+
+        this._gainNode.disconnect(0);
+        this._gainNode = null;
     };
 
     createjs.LazyWebAudioInstance = createjs.promote(LazyWebAudioInstance, "AbstractSoundInstance");
